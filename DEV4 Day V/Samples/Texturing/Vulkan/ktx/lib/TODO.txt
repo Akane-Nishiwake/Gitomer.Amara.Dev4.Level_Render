@@ -1,0 +1,6 @@
+Download KTX on other platforms and build static libraries to copy here:
+
+https://github.com/KhronosGroup/KTX-Software
+
+
+
