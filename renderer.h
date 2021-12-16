@@ -205,30 +205,31 @@ public:
 		proxy.Create();
 		float aspect = 0.0f;
 		vlk.GetAspectRatio(aspect);
-		proxy.ProjectionVulkanLHF(G_DEGREE_TO_RADIAN(65), aspect, 0.1f, 100.0f, projection);
-		// TODO: Part 2b
-		proxy.IdentityF(world);
-		proxy.LookAtLHF(eye, at, up, view);
-		model.sunColor = LightCol;
-		model.sunDirection = LightDir;
-		proxy.IdentityF(model.matricies[0]);
-		proxy.IdentityF(model.matricies[1]);
-		model.materials[0] = FSLogo_materials[0].attrib;
-		model.materials[1] = FSLogo_materials[1].attrib;
-		model.view = view;
-		model.projection = projection;
-		model.matricies[0] = world;
+		//proxy.ProjectionVulkanLHF(G_DEGREE_TO_RADIAN(65), aspect, 0.1f, 100.0f, projection);
+		//// TODO: Part 2b
+		//proxy.IdentityF(world);
+		//proxy.LookAtLHF(eye, at, up, view);
+		//model.sunColor = LightCol;
+		//model.sunDirection = LightDir;
+		//proxy.IdentityF(model.matricies[0]);
+		//proxy.IdentityF(model.matricies[1]);
+		//model.materials[0] = FSLogo_materials[0].attrib;
+		//model.materials[1] = FSLogo_materials[1].attrib;
+		//model.view = view;
+		//model.projection = projection;
+		//model.matricies[0] = world;
 		
 		for (int i = 0; i < newLevel.myModel.size(); i++) // checking all models
 		{
 			for (int j= 0; j < newLevel.myModel[i].parse.meshCount; j++)
 			{
 				newLevel.myModel[i].modelData.matricies[j] = newLevel.myModel[i].modelData.matricies[0]; //setting world matrix
+				//float debug = 0;
 			}
 			//view
 			proxy.IdentityF(newLevel.myModel[i].modelData.view);
 			proxy.LookAtLHF(eye, at, up, newLevel.myModel[i].modelData.view);
-			//lighting
+			//lighting - set model lighting data to the light color and direction
 			newLevel.myModel[i].modelData.sunColor = LightCol;
 			newLevel.myModel[i].modelData.sunDirection = LightDir;
 			//projection
