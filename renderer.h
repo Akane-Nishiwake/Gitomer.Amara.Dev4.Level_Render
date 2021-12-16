@@ -4,6 +4,7 @@
 #endif
 #include "FSLogo.h"
 #include "ModelLoader.h"
+
 // Simple Vertex Shader
 #pragma region VertexShader
 const char* vertexShaderSource = R"(
@@ -130,6 +131,7 @@ class Renderer
 //		GW::MATH::GMATRIXF matricies[MAX_SUBMESH_PER_DRAW];
 //		OBJ_ATTRIBUTES materials[MAX_SUBMESH_PER_DRAW];
 //	};
+
 	struct MaterialData
 	{
 		unsigned int material_index;
@@ -156,33 +158,42 @@ class Renderer
 	// pipeline settings for drawing (also required)
 	VkPipeline pipeline = nullptr;
 	VkPipelineLayout pipelineLayout = nullptr;
-	// TODO: Part 2e
+
 	VkDescriptorSetLayout descripLayout = nullptr;
-	// TODO: Part 2f
+
 	VkDescriptorPool descripPool = nullptr;
-	// TODO: Part 2g
+
 	VkDescriptorSet descripDS = nullptr;
-		// TODO: Part 4f
-		
-	// TODO: Part 2a
+
 	GW::MATH::GMatrix proxy;
 	GW::MATH::GVECTORF eye = { 0.75f, 0.25f, -1.5f, 0 };
 	GW::MATH::GVECTORF at = { 0.15f, 0.75f, 0 };
 	GW::MATH::GVECTORF up = { 0, 1, 0 };
 	GW::MATH::GVECTORF LightDir = { -1, -1, 2 };
 	GW::MATH::GVECTORF LightCol = { 0.9, 0.9, 1, 1 };
-	// TODO: Part 2b
+
 	SHADER_MODEL_DATA model;
 	GW::MATH::GMATRIXF view;
 	GW::MATH::GMATRIXF projection;
 	GW::MATH::GMATRIXF world;
-	// TODO: Part 4g
-public:
 
+	
+public:
+	//std::vector <Model> myModel;
+
+	
 	Renderer(GW::SYSTEM::GWindow _win, GW::GRAPHICS::GVulkanSurface _vlk)
 	{
 		win = _win;
 		vlk = _vlk;
+
+		//Model tempModel;
+		//tempModel.LoadFile("../somemodelfile.h2b"); //loading in the appropriate file
+		Level newLevel;
+		newLevel.LoadLevel("../GameLevel.txt");
+
+		// we need to load the GameLevel.txt from the level, the level loads each .h2b into a model
+
 		unsigned int image = 0;
 		vlk.GetSwapchainImageCount(image);
 		vectorBuffer.resize(image);
@@ -536,13 +547,12 @@ public:
 private:
 	void CleanUp()
 	{
-		// wait till everything has completed
+	
 		vkDeviceWaitIdle(device);
-		// Release allocated buffers, shaders & pipeline
-		// TODO: Part 1g
+	
 		vkDestroyBuffer(device, indexBuffer, nullptr);
 		vkFreeMemory(device, indexData, nullptr);
-		// TODO: Part 2d
+		
 		for (int i = 0; i < 2; i++)
 		{
 			vkDestroyBuffer(device, vectorBuffer[i], nullptr);
@@ -552,9 +562,9 @@ private:
 		vkFreeMemory(device, vertexData, nullptr);
 		vkDestroyShaderModule(device, vertexShader, nullptr);
 		vkDestroyShaderModule(device, pixelShader, nullptr);
-		// TODO: Part 2e
+	
 		vkDestroyDescriptorSetLayout(device, descripLayout, nullptr);
-		// TODO: part 2f
+		
 		vkDestroyDescriptorPool(device, descripPool, nullptr);
 		vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
 		vkDestroyPipeline(device, pipeline, nullptr);
