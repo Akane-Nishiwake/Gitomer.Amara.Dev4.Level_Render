@@ -9,7 +9,7 @@
 #define MAX_SUBMESH_PER_DRAW 1024
 struct SHADER_MODEL_DATA
 {
-	GW::MATH::GVECTORF sunDirection, sunColor, sunAmbi;
+	GW::MATH::GVECTORF sunDirection, sunColor /*,sunAmbi*/;
 	GW::MATH::GMATRIXF view, projection;
 
 	GW::MATH::GMATRIXF matricies[MAX_SUBMESH_PER_DRAW]; //world matrix

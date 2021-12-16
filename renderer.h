@@ -218,8 +218,30 @@ public:
 		model.view = view;
 		model.projection = projection;
 		model.matricies[0] = world;
-		// TODO: Part 4g
-		// TODO: part 3b
+		
+		for (int i = 0; i < newLevel.myModel.size(); i++) // checking all models
+		{
+			for (int j= 0; j < newLevel.myModel[i].parse.meshCount; j++)
+			{
+				newLevel.myModel[i].modelData.matricies[j] = newLevel.myModel[i].modelData.matricies[0]; //setting world matrix
+			}
+			//view
+			proxy.IdentityF(newLevel.myModel[i].modelData.view);
+			proxy.LookAtLHF(eye, at, up, newLevel.myModel[i].modelData.view);
+			//lighting
+			newLevel.myModel[i].modelData.sunColor = LightCol;
+			newLevel.myModel[i].modelData.sunDirection = LightDir;
+			//projection
+			proxy.ProjectionVulkanLHF(G_DEGREE_TO_RADIAN(65), aspect, 0.1f, 100.0f,newLevel.myModel[i].modelData.projection);
+			//materials
+			for (int k = 0; k < newLevel.myModel[i].parse.materialCount; k++)
+			{
+				newLevel.myModel[i].modelData.materials[k].Kd.x = newLevel.myModel[i].parse.materials[k].attrib.Kd.x;
+				newLevel.myModel[i].modelData.materials[k].Kd.y = newLevel.myModel[i].parse.materials[k].attrib.Kd.y;
+				newLevel.myModel[i].modelData.materials[k].Kd.z = newLevel.myModel[i].parse.materials[k].attrib.Kd.z;
+			}
+		}
+
 
 		/***************** GEOMETRY INTIALIZATION ******************/
 		// Grab the device & physical device so we can allocate some stuff
