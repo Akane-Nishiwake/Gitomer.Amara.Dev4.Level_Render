@@ -236,13 +236,11 @@ public:
 	{
 		win = _win;
 		vlk = _vlk;
-
-		newLevel.LoadLevel("../GameLevel.txt");
-		switchedLevel.LoadLevel("../GameLevel3.txt");
-
 		//camera movement
 		input.Create(win);
 		control.Create();
+		
+
 
 		unsigned int image = 0;
 		vlk.GetSwapchainImageCount(image);
@@ -530,6 +528,7 @@ public:
 	}
 	void Render()
 	{
+
 		// grab the current Vulkan commandBuffer
 		unsigned int currentBuffer;
 		vlk.GetSwapchainCurrentImage(currentBuffer);
@@ -554,21 +553,40 @@ public:
 	 vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout,
 		0, 1, &descripDS, 0, nullptr);
 		 GvkHelper::write_to_buffer(device, vectorData[currentBuffer], shaderData.data(), sizeof(shaderData[0])*shaderData.size());
-
+		 float num1 = 0.0f;
+		 input.GetState(G_KEY_1, num1);
+		 float num2 = 0.0f;
+		 input.GetState(G_KEY_2, num2);
+		 if (num1)
+		 {
+			 newLevel.LoadLevel("../GameLevel.txt");
+		 }
+		 else if (num2)
+		 {
+			 switchedLevel.LoadLevel("../GameLevel3.txt");
+		 }
 		 Level* tempLevel = nullptr;
+		 if (num1)
+		 {
+			 tempLevel = &newLevel;
+		 }
+		 else if (num2)
+		 {
+			 tempLevel = &switchedLevel;
+		 }
 		 //if key pressed set temp level to & of current level????????????????????????????????????????????????????????????????????????????????????????
 	 //MaterialData materialData[2] = {};
-	 for (int i = 0; i < newLevel.myModel.size(); i++) //for every model
+	 for (int i = 0; i < tempLevel->myModel.size(); i++) //for every model
 	 {
-		vkCmdBindVertexBuffers(commandBuffer, 0, 1, &newLevel.myModel[i].vertexBuffer, offsets);
-		vkCmdBindIndexBuffer(commandBuffer, newLevel.myModel[i].indexBuffer, 0, VkIndexType::VK_INDEX_TYPE_UINT32);
-		for (int j = 0; j < newLevel.myModel[i].parse.meshCount; j++) // for every sub mesh
+		vkCmdBindVertexBuffers(commandBuffer, 0, 1, &tempLevel->myModel[i].vertexBuffer, offsets);
+		vkCmdBindIndexBuffer(commandBuffer, tempLevel->myModel[i].indexBuffer, 0, VkIndexType::VK_INDEX_TYPE_UINT32);
+		for (int j = 0; j < tempLevel->myModel[i].parse.meshCount; j++) // for every sub mesh
 		{
 			unsigned int id[2] = { i, j };
 			//materialData[i].material_index = FSLogo_meshes[i].materialIndex;
 			vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
 				0, sizeof(unsigned int) * 2, id);
-			vkCmdDrawIndexed(commandBuffer, newLevel.myModel[i].parse.meshes[j].drawInfo.indexCount, 1, newLevel.myModel[i].parse.meshes[j].drawInfo.indexOffset,0, 0);
+			vkCmdDrawIndexed(commandBuffer, tempLevel->myModel[i].parse.meshes[j].drawInfo.indexCount, 1, tempLevel->myModel[i].parse.meshes[j].drawInfo.indexOffset,0, 0);
 			 float debug = 0;
 		 }
 	 }
@@ -577,6 +595,18 @@ public:
 	}
 	void CameraUpdate()
 	{
+		float num1 = 0.0f;
+		input.GetState(G_KEY_1, num1);
+		float num2 = 0.0f;
+		input.GetState(G_KEY_2, num2);
+		if (num1)
+		{
+			newLevel.LoadLevel("../GameLevel.txt");
+		}
+		else if (num2)
+		{
+			switchedLevel.LoadLevel("../GameLevel3.txt");
+		}
 		auto now = std::chrono::steady_clock::now();
 		deltaTime = std::chrono::duration_cast<std::chrono::microseconds>(now - lastUpdate).count() / 1000000.0f; //seconds
 		lastUpdate = now;
@@ -665,9 +695,19 @@ public:
 			inverseView.row4 = camPos;
 		}
 		// TODO: Part 4c
+		Level* tempLevel = nullptr;
+		if (num1)
+		{
+			tempLevel = &newLevel;
+		}
+		else if (num2)
+		{
+			tempLevel = &switchedLevel;
+		}
+		//add if check for button input
 		proxy.InverseF(inverseView, shaderData[0].view);
 		proxy.MultiplyMatrixF(shaderData[0].view, translationMatrix, shaderData[0].view);
-		for (int i = 0; i < newLevel.myModel.size(); i++)
+		for (int i = 0; i < tempLevel->myModel.size(); i++)
 		{
 			shaderData[i].view = shaderData[0].view;
 			shaderData[i].camWpos = inverseView.row4;
