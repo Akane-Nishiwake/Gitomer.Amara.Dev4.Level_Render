@@ -34,6 +34,8 @@ struct SHADER_MODEL_DATA
 {
 	float4 sunDirection;
 	float4 sunColor; //lighting
+	float4 Ambi;
+	float4 camWpos;
 	matrix view;
 	matrix projection; //viewing
 
@@ -61,9 +63,9 @@ OutVertex main(Vertex inputVertex)
 	OutVertex output = (OutVertex)0;
 	output.pos = float4(inputVertex.pos, 1);
 
-	output.nrm = mul(float4(inputVertex.nrm, 0), sceneData[mesh_ID].matrices[material_ID]);
-	output.posW = mul(float4(inputVertex.pos, 0), sceneData[mesh_ID].matrices[material_ID]); 
-	output.pos = mul(output.pos, sceneData[mesh_ID].matrices[material_ID]);
+	output.nrm = mul(float4(inputVertex.nrm, 0), sceneData[mesh_ID].matrices[0]); //normal
+	output.posW = mul(float4(inputVertex.pos, 1), sceneData[mesh_ID].matrices[0]); //world
+	output.pos = mul(output.pos, sceneData[mesh_ID].matrices[0]); 
 	output.pos = mul(output.pos, sceneData[mesh_ID].view);
 	output.pos = mul(output.pos, sceneData[mesh_ID].projection); //<-this might be the problem child
 
@@ -99,6 +101,8 @@ struct SHADER_MODEL_DATA
 {
     float4 sunDirection;
     float4 sunColor; 
+	float4 Ambi;
+	float4 camWpos;
     matrix view;
     matrix projection;
     matrix matrices[1024]; 
@@ -115,9 +119,15 @@ struct OutVertex
 StructuredBuffer<SHADER_MODEL_DATA> sceneData;
 float4 main(OutVertex outVert) : SV_TARGET
 {
+	float4 Am = sceneData[mesh_ID].Ambi;
+	float3 viewDirect = normalize(sceneData[mesh_ID].camWpos.xyz - outVert.posW.xyz);
+	float3 HalfVec = normalize(-normalize(sceneData[mesh_ID].sunDirection.xyz) + viewDirect);
+	float Intense = saturate(pow( dot(normalize(outVert.nrm),HalfVec), sceneData[mesh_ID].materials[material_ID].Ns));
+	  float4 Reflection = float4(sceneData[mesh_ID].materials[material_ID].Ks, 0) * Intense * sceneData[mesh_ID].sunColor;
     float ratio = saturate(dot(normalize(-sceneData[mesh_ID].sunDirection.xyz), normalize(outVert.nrm)));
-    float4 color = float4(sceneData[mesh_ID].materials[material_ID].Kd, 0) * sceneData[mesh_ID].sunColor * ratio;
-	return color;
+	float4 Lumi = sceneData[mesh_ID].sunColor * ratio;
+    float4 materialColor = float4(sceneData[mesh_ID].materials[material_ID].Kd, 0);
+	return saturate(Lumi + Am) * materialColor + Reflection;
 }
 )";
 #pragma endregion
@@ -125,6 +135,10 @@ float4 main(OutVertex outVert) : SV_TARGET
 // Creation, Rendering & Cleanup
 class Renderer
 {
+#pragma region Initialzers
+
+
+
 	// proxy handles
 	GW::SYSTEM::GWindow win;
 	GW::GRAPHICS::GVulkanSurface vlk;
@@ -163,25 +177,69 @@ class Renderer
 	GW::MATH::GVECTORF up = { 0, 1, 0 };
 	GW::MATH::GVECTORF LightDir = { -1, -1, 2 };
 	GW::MATH::GVECTORF LightCol = { 0.9, 0.9, 1, 1 };
-
+	GW::MATH::GVECTORF Ambi = { 0.25,0.25,0.35,1 };
 	std::vector<SHADER_MODEL_DATA> shaderData;
 	GW::MATH::GMATRIXF view;
 	GW::MATH::GMATRIXF projection;
 	GW::MATH::GMATRIXF world;
 	GW::MATH::GMATRIXF camera;
+#pragma endregion
+	void fillShaderData(Level &level, VkPhysicalDevice physicalDevice, VkDevice device)
+	{
+		shaderData.clear();
+		float aspect = 0.0f;
+		vlk.GetAspectRatio(aspect);
+		shaderData.resize(level.myModel.size());
+		for (int i = 0; i < level.myModel.size(); i++) // checking all models
+		{
 
+			for (int j = 0; j < level.myModel[i].parse.meshCount; j++) //check submeshes
+			{
+				shaderData[i].matricies[j] = level.myModel[i].modelData.matricies[j]; //setting world matrix
+				float debug = 0;
+			}
+			//view
+			proxy.IdentityF(shaderData[i].view);
+			proxy.LookAtLHF(eye, at, up, shaderData[i].view);
+			//lighting - set model lighting data to the light color and direction
+			shaderData[i].sunColor = LightCol;
+			shaderData[i].Ambi = Ambi;
+			shaderData[i].sunDirection = LightDir;
+			shaderData[i].camWpos = eye;
+			//projection matrix
+			proxy.ProjectionVulkanLHF(G_DEGREE_TO_RADIAN(65), aspect, 0.1f, 150.0f, shaderData[i].projection);
+			//materials writing to shader
+			for (int k = 0; k < level.myModel[i].parse.materialCount; k++)
+			{
+				shaderData[i].materials[k] = (OBJ_ATTRIBUTES&)level.myModel[i].parse.materials[k].attrib;
+				float debug = 0;
+			}
+			//buffers
+			GvkHelper::create_buffer(physicalDevice, device, sizeof(H2B::VERTEX) * level.myModel[i].parse.vertices.size(),
+				VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+				VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &level.myModel[i].vertexBuffer, &level.myModel[i].vertexData);
+			GvkHelper::write_to_buffer(device, level.myModel[i].vertexData, level.myModel[i].parse.vertices.data(), sizeof(H2B::VERTEX) * level.myModel[i].parse.vertices.size());
+
+			GvkHelper::create_buffer(physicalDevice, device, sizeof(unsigned int) * level.myModel[i].parse.indices.size(),
+				VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+				VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &level.myModel[i].indexBuffer, &level.myModel[i].indexData);
+			GvkHelper::write_to_buffer(device, level.myModel[i].indexData, level.myModel[i].parse.indices.data(), sizeof(unsigned int) * level.myModel[i].parse.indices.size());
+		}
+	}
 	
 public:
-	//std::vector <Model> myModel;
 
-		Level newLevel;
+	Level newLevel;
+	Level switchedLevel;
 	
 	Renderer(GW::SYSTEM::GWindow _win, GW::GRAPHICS::GVulkanSurface _vlk)
 	{
 		win = _win;
 		vlk = _vlk;
 
-		newLevel.LoadLevel("../GameLevel2.txt");
+		newLevel.LoadLevel("../GameLevel.txt");
+		switchedLevel.LoadLevel("../GameLevel3.txt");
+
 		//camera movement
 		input.Create(win);
 		control.Create();
@@ -197,55 +255,10 @@ public:
 		vlk.GetDevice((void**)&device);
 		vlk.GetPhysicalDevice((void**)&physicalDevice);
 		proxy.Create();
-		float aspect = 0.0f;
-		vlk.GetAspectRatio(aspect);
-		//proxy.ProjectionVulkanLHF(G_DEGREE_TO_RADIAN(65), aspect, 0.1f, 100.0f, projection);
-		//// TODO: Part 2b
-		//proxy.IdentityF(world);
-		//proxy.LookAtLHF(eye, at, up, view);
-		//model.sunColor = LightCol;
-		//model.sunDirection = LightDir;
-		//proxy.IdentityF(model.matricies[0]);
-		//proxy.IdentityF(model.matricies[1]);
-		//model.materials[0] = FSLogo_materials[0].attrib;
-		//model.materials[1] = FSLogo_materials[1].attrib;
-		//model.view = view;
-		//model.projection = projection;
-		//model.matricies[0] = world;
-		shaderData.resize(newLevel.myModel.size());
-		for (int i = 0; i < newLevel.myModel.size(); i++) // checking all models
-		{
+	
+		fillShaderData(newLevel, physicalDevice, device);
+	
 		
-			for (int j= 0; j < newLevel.myModel[i].parse.meshCount; j++) //check submeshes
-			{
-				shaderData[i].matricies[j] = newLevel.myModel[i].modelData.matricies[j]; //setting world matrix
-				float debug = 0;
-			}
-			//view
-			proxy.IdentityF(shaderData[i].view);
-			proxy.LookAtLHF(eye, at, up, shaderData[i].view);
-			//lighting - set model lighting data to the light color and direction
-			shaderData[i].sunColor = LightCol;
-			shaderData[i].sunDirection = LightDir;
-			//projection matrix
-			proxy.ProjectionVulkanLHF(G_DEGREE_TO_RADIAN(65), aspect, 0.1f, 150.0f,shaderData[i].projection);
-			//materials writing to shader
-			for (int k = 0; k < newLevel.myModel[i].parse.materialCount; k++)
-			{
-				shaderData[i].materials[k] = (OBJ_ATTRIBUTES &)newLevel.myModel[i].parse.materials[k];
-				float debug = 0;
-			}
-			//buffers
-			GvkHelper::create_buffer(physicalDevice, device, sizeof(H2B::VERTEX) * newLevel.myModel[i].parse.vertices.size(),
-				VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-				VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &newLevel.myModel[i].vertexBuffer, &newLevel.myModel[i].vertexData);
-			GvkHelper::write_to_buffer(device, newLevel.myModel[i].vertexData, newLevel.myModel[i].parse.vertices.data(), sizeof(H2B::VERTEX) * newLevel.myModel[i].parse.vertices.size());
-			
-			GvkHelper::create_buffer(physicalDevice, device, sizeof(unsigned int)* newLevel.myModel[i].parse.indices.size(),
-				VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-				VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &newLevel.myModel[i].indexBuffer, &newLevel.myModel[i].indexData);
-			GvkHelper::write_to_buffer(device, newLevel.myModel[i].indexData, newLevel.myModel[i].parse.indices.data(), sizeof(unsigned int) * newLevel.myModel[i].parse.indices.size());
-		}
 
 
 		/***************** GEOMETRY INTIALIZATION ******************/
@@ -279,6 +292,7 @@ public:
 			GvkHelper::write_to_buffer(device, vectorData[i], shaderData.data(), sizeof(SHADER_MODEL_DATA)*shaderData.size());
 		}
 
+#pragma region Shader Initialization
 
 		/***************** SHADER INTIALIZATION ******************/
 		// Intialize runtime shader compiler HLSL -> SPIRV
@@ -310,6 +324,7 @@ public:
 		// Free runtime shader compiler resources
 		shaderc_compile_options_release(options);
 		shaderc_compiler_release(compiler);
+#pragma endregion
 
 		/***************** PIPELINE INTIALIZATION ******************/
 		// Create Pipeline & Layout (Thanks Tiny!)
@@ -515,14 +530,6 @@ public:
 	}
 	void Render()
 	{
-		// TODO: Part 2a
-		//auto now = std::chrono::steady_clock::now();
-		//deltaTime = std::chrono::duration_cast<std::chrono::microseconds>(now - lastUpdate).count() / 1000000.0f; //seconds
-		//lastUpdate = now;
-
-		//proxy.RotateYLocalF(model.matricies[1], deltaTime, model.matricies[1]);
-
-		// TODO: Part 4d
 		// grab the current Vulkan commandBuffer
 		unsigned int currentBuffer;
 		vlk.GetSwapchainCurrentImage(currentBuffer);
@@ -543,13 +550,13 @@ public:
 		
 		// now we can draw
 		VkDeviceSize offsets[] = { 0 };
-		//vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexHandle, offsets);
-		//vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VkIndexType::VK_INDEX_TYPE_UINT32);
-		// TODO: Part 1h
+
 	 vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout,
 		0, 1, &descripDS, 0, nullptr);
 		 GvkHelper::write_to_buffer(device, vectorData[currentBuffer], shaderData.data(), sizeof(shaderData[0])*shaderData.size());
 
+		 Level* tempLevel = nullptr;
+		 //if key pressed set temp level to & of current level????????????????????????????????????????????????????????????????????????????????????????
 	 //MaterialData materialData[2] = {};
 	 for (int i = 0; i < newLevel.myModel.size(); i++) //for every model
 	 {
@@ -580,7 +587,7 @@ public:
 		GW::MATH::GMATRIXF pitchMatrix = GW::MATH::GIdentityMatrixF;
 		GW::MATH::GMATRIXF yawMatrix = GW::MATH::GIdentityMatrixF;
 		// TODO: Part 4d
-		const float camSpeed = 0.3f;
+		const float camSpeed = 5.0f;
 		float frameSpeed = camSpeed * deltaTime;
 		float thumbSpeed = G_PI_F * deltaTime;
 		float FOV = G_DEGREE_TO_RADIAN(65);
@@ -658,11 +665,12 @@ public:
 			inverseView.row4 = camPos;
 		}
 		// TODO: Part 4c
-		proxy.InverseF(inverseView, newLevel.myModel[0].modelData.view);
+		proxy.InverseF(inverseView, shaderData[0].view);
 		proxy.MultiplyMatrixF(shaderData[0].view, translationMatrix, shaderData[0].view);
 		for (int i = 0; i < newLevel.myModel.size(); i++)
 		{
-			shaderData[i].view = newLevel.myModel[0].modelData.view;
+			shaderData[i].view = shaderData[0].view;
+			shaderData[i].camWpos = inverseView.row4;
 		}
 
 	}
