@@ -239,7 +239,7 @@ public:
 		//camera movement
 		input.Create(win);
 		control.Create();
-		newLevel.LoadLevel("../GameLevel.txt"); //starting level
+		newLevel.LoadLevel("../GameLevel3.txt"); //starting level
 		unsigned int image = 0;
 		vlk.GetSwapchainImageCount(image);
 		vectorBuffer.resize(image);
@@ -602,7 +602,9 @@ public:
 		GW::MATH::GMATRIXF translationMatrix = GW::MATH::GIdentityMatrixF;
 		GW::MATH::GMATRIXF pitchMatrix = GW::MATH::GIdentityMatrixF;
 		GW::MATH::GMATRIXF yawMatrix = GW::MATH::GIdentityMatrixF;
-		// TODO: Part 4d
+
+#pragma region KeyState Intializers
+
 		const float camSpeed = 5.0f;
 		float frameSpeed = camSpeed * deltaTime;
 		float thumbSpeed = G_PI_F * deltaTime;
@@ -648,6 +650,8 @@ public:
 		input.GetState(G_KEY_D, dState);
 		input.GetState(G_KEY_A, aState);
 		control.GetState(0, G_LX_AXIS, lax);
+#pragma endregion
+
 		if (space > 0 || shift > 0 || rt > 0 || lt > 0)
 		{
 			yChange = space - shift + rt - lt;
