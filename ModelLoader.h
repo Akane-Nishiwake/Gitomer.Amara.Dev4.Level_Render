@@ -5,6 +5,7 @@
 #include <fstream>
 #include "h2bParser.h"
 #include "FSLogo.h"
+//#include "../OBJ/DoorSingle_Wall_SideB.h"
 //model data for shader
 #define MAX_SUBMESH_PER_DRAW 1024
 struct SHADER_MODEL_DATA
@@ -42,7 +43,9 @@ public:
 	//model i am storing data into
 	void LoadFile(const char* h2bFile)
 	{
-		parse.Parse(h2bFile);
+		//parse.Parse(h2bFile);
+		bool b = parse.Parse(h2bFile);
+		float debug = 0;
 	}
 
 	
@@ -65,8 +68,8 @@ public:
 				{
 					Model temp;
 					file.getline(buffer, 128, '\n'); // name
-					std::string name = "../OBJ/";
-					temp.modelName = buffer;
+					std::string name = "../../OBJ/";
+					temp.modelName = std::string(buffer);
 					name.append(temp.modelName);
 					name.append(".h2b");
 					char* sally = const_cast <char*> (name.c_str()); // making sally the .h2b

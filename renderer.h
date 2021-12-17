@@ -13,7 +13,8 @@ const char* vertexShaderSource = R"(
 cbuffer Mesh_Data
 {
     uint mesh_ID;
-	int padding;
+	uint material_ID;
+
 };
 struct OBJ_ATTRIBUTES
 {
@@ -58,11 +59,11 @@ OutVertex main(Vertex inputVertex)
 {
 	OutVertex output = (OutVertex)0;
 	output.pos = float4(inputVertex.pos, 1);
-	output.nrm = mul(float4(inputVertex.nrm, 0), sceneData[0].matrices[mesh_ID]);
-    output.posW = mul(float4(inputVertex.pos, 0), sceneData[0].matrices[mesh_ID]);
-output.pos = mul(output.pos, sceneData[0].matrices[mesh_ID]);
-	output.pos = mul(output.pos, sceneData[0].view);
-	output.pos = mul(output.pos, sceneData[0].projection);
+	output.nrm = mul(float4(inputVertex.nrm, 0), sceneData[mesh_ID].matrices[material_ID]);
+    output.posW = mul(float4(inputVertex.pos, 0), sceneData[mesh_ID].matrices[material_ID]);
+output.pos = mul(output.pos, sceneData[mesh_ID].matrices[material_ID]);
+	output.pos = mul(output.pos, sceneData[mesh_ID].view);
+	output.pos = mul(output.pos, sceneData[mesh_ID].projection);
 	return output;
 }
 )";
@@ -76,8 +77,7 @@ const char* pixelShaderSource = R"(
 cbuffer MeshData
 {
     uint mesh_ID;
-    matrix pad1;
-    matrix pad2;
+    uint material_ID;
 };
 struct OBJ_ATTRIBUTES
 {
@@ -112,8 +112,8 @@ struct OutVertex
 StructuredBuffer<SHADER_MODEL_DATA> sceneData;
 float4 main(OutVertex outVert) : SV_TARGET
 {
-    float ratio = saturate(dot(normalize(-sceneData[0].sunDirection.xyz), normalize(outVert.nrm)));
-    float4 color = float4(sceneData[0].materials[mesh_ID].Kd, 0) * sceneData[0].sunColor * ratio;
+    float ratio = saturate(dot(normalize(-sceneData[mesh_ID].sunDirection.xyz), normalize(outVert.nrm)));
+    float4 color = float4(sceneData[mesh_ID].materials[material_ID].Kd, 0) * sceneData[mesh_ID].sunColor * ratio;
 	return color;
 }
 )";
@@ -166,13 +166,13 @@ class Renderer
 	VkDescriptorSet descripDS = nullptr;
 
 	GW::MATH::GMatrix proxy;
-	GW::MATH::GVECTORF eye = { 0.75f, 0.25f, -1.5f, 0 };
+	GW::MATH::GVECTORF eye = { 0, 15, -15, 0 };
 	GW::MATH::GVECTORF at = { 0.15f, 0.75f, 0 };
 	GW::MATH::GVECTORF up = { 0, 1, 0 };
 	GW::MATH::GVECTORF LightDir = { -1, -1, 2 };
 	GW::MATH::GVECTORF LightCol = { 0.9, 0.9, 1, 1 };
 
-	SHADER_MODEL_DATA model;
+	std::vector<SHADER_MODEL_DATA> shaderData;
 	GW::MATH::GMATRIXF view;
 	GW::MATH::GMATRIXF projection;
 	GW::MATH::GMATRIXF world;
@@ -181,6 +181,7 @@ class Renderer
 public:
 	//std::vector <Model> myModel;
 
+		Level newLevel;
 	
 	Renderer(GW::SYSTEM::GWindow _win, GW::GRAPHICS::GVulkanSurface _vlk)
 	{
@@ -189,7 +190,6 @@ public:
 
 		//Model tempModel;
 		//tempModel.LoadFile("../somemodelfile.h2b"); //loading in the appropriate file
-		Level newLevel;
 		newLevel.LoadLevel("../GameLevel.txt");
 
 		// we need to load the GameLevel.txt from the level, the level loads each .h2b into a model
@@ -201,7 +201,9 @@ public:
 		unsigned int width, height;
 		win.GetClientWidth(width);
 		win.GetClientHeight(height);
-
+		VkPhysicalDevice physicalDevice = nullptr;
+		vlk.GetDevice((void**)&device);
+		vlk.GetPhysicalDevice((void**)&physicalDevice);
 		proxy.Create();
 		float aspect = 0.0f;
 		vlk.GetAspectRatio(aspect);
@@ -218,37 +220,45 @@ public:
 		//model.view = view;
 		//model.projection = projection;
 		//model.matricies[0] = world;
-		
+		shaderData.resize(newLevel.myModel.size());
 		for (int i = 0; i < newLevel.myModel.size(); i++) // checking all models
 		{
+		
 			for (int j= 0; j < newLevel.myModel[i].parse.meshCount; j++)
 			{
-				newLevel.myModel[i].modelData.matricies[j] = newLevel.myModel[i].modelData.matricies[0]; //setting world matrix
+				shaderData[i].matricies[j] = newLevel.myModel[i].modelData.matricies[j]; //setting world matrix
 				//float debug = 0;
 			}
 			//view
-			proxy.IdentityF(newLevel.myModel[i].modelData.view);
-			proxy.LookAtLHF(eye, at, up, newLevel.myModel[i].modelData.view);
+			proxy.IdentityF(shaderData[i].view);
+			proxy.LookAtLHF(eye, at, up, shaderData[i].view);
 			//lighting - set model lighting data to the light color and direction
-			newLevel.myModel[i].modelData.sunColor = LightCol;
-			newLevel.myModel[i].modelData.sunDirection = LightDir;
+			shaderData[i].sunColor = LightCol;
+			shaderData[i].sunDirection = LightDir;
 			//projection
-			proxy.ProjectionVulkanLHF(G_DEGREE_TO_RADIAN(65), aspect, 0.1f, 100.0f,newLevel.myModel[i].modelData.projection);
+			proxy.ProjectionVulkanLHF(G_DEGREE_TO_RADIAN(65), aspect, 0.1f, 100.0f,shaderData[i].projection);
 			//materials
 			for (int k = 0; k < newLevel.myModel[i].parse.materialCount; k++)
 			{
-				newLevel.myModel[i].modelData.materials[k].Kd.x = newLevel.myModel[i].parse.materials[k].attrib.Kd.x;
-				newLevel.myModel[i].modelData.materials[k].Kd.y = newLevel.myModel[i].parse.materials[k].attrib.Kd.y;
-				newLevel.myModel[i].modelData.materials[k].Kd.z = newLevel.myModel[i].parse.materials[k].attrib.Kd.z;
+				shaderData[i].materials[k] = (OBJ_ATTRIBUTES &)newLevel.myModel[i].parse.materials[k].attrib;
+				float debug = 0;
 			}
+			//buffers
+			GvkHelper::create_buffer(physicalDevice, device, sizeof(H2B::VERTEX) * newLevel.myModel[i].parse.vertices.size(),
+				VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+				VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &newLevel.myModel[i].vertexBuffer, &newLevel.myModel[i].vertexData);
+			GvkHelper::write_to_buffer(device, newLevel.myModel[i].vertexData, newLevel.myModel[i].parse.vertices.data(), sizeof(H2B::VERTEX) * newLevel.myModel[i].parse.vertices.size());
+			
+			GvkHelper::create_buffer(physicalDevice, device, sizeof(unsigned int)* newLevel.myModel[i].parse.indices.size(),
+				VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+				VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &newLevel.myModel[i].indexBuffer, &newLevel.myModel[i].indexData);
+			GvkHelper::write_to_buffer(device, newLevel.myModel[i].indexData, newLevel.myModel[i].parse.indices.data(), sizeof(unsigned int) * newLevel.myModel[i].parse.indices.size());
 		}
 
 
 		/***************** GEOMETRY INTIALIZATION ******************/
 		// Grab the device & physical device so we can allocate some stuff
-		VkPhysicalDevice physicalDevice = nullptr;
-		vlk.GetDevice((void**)&device);
-		vlk.GetPhysicalDevice((void**)&physicalDevice);
+		
 
 		// TODO: Part 1c
 		// Create Vertex Buffer
@@ -268,12 +278,13 @@ public:
 			VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &indexBuffer, &indexData);
 		GvkHelper::write_to_buffer(device, indexData, FSLogo_indices, sizeof(FSLogo_indices));
 		// TODO: Part 2d
+		
 		for (int i = 0; i < image; i++)
 		{
-			GvkHelper::create_buffer(physicalDevice, device, sizeof(SHADER_MODEL_DATA),
+			GvkHelper::create_buffer(physicalDevice, device, sizeof(SHADER_MODEL_DATA)*  shaderData.size(),
 				VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
 				VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &vectorBuffer[i], &vectorData[i]);
-			GvkHelper::write_to_buffer(device, vectorData[i], &model, sizeof(SHADER_MODEL_DATA));
+			GvkHelper::write_to_buffer(device, vectorData[i], shaderData.data(), sizeof(SHADER_MODEL_DATA)*shaderData.size());
 		}
 
 
@@ -473,7 +484,7 @@ public:
 			// TODO: Part 4f
 		VkPushConstantRange constant_range_info = {};
 		constant_range_info.offset = 0;
-		constant_range_info.size = sizeof(unsigned int);
+		constant_range_info.size = sizeof(unsigned int) * 2;
 		constant_range_info.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
 		// Descriptor pipeline layout
 		VkPipelineLayoutCreateInfo pipeline_layout_create_info = {};
@@ -521,7 +532,7 @@ public:
 		deltaTime = std::chrono::duration_cast<std::chrono::microseconds>(now - lastUpdate).count() / 1000000.0f; //seconds
 		lastUpdate = now;
 
-		proxy.RotateYLocalF(model.matricies[1], deltaTime, model.matricies[1]);
+		//proxy.RotateYLocalF(model.matricies[1], deltaTime, model.matricies[1]);
 
 		// TODO: Part 4d
 		// grab the current Vulkan commandBuffer
@@ -544,23 +555,26 @@ public:
 		
 		// now we can draw
 		VkDeviceSize offsets[] = { 0 };
-		vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexHandle, offsets);
-		vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VkIndexType::VK_INDEX_TYPE_UINT32);
+		//vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexHandle, offsets);
+		//vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VkIndexType::VK_INDEX_TYPE_UINT32);
 		// TODO: Part 1h
 	 vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout,
 		0, 1, &descripDS, 0, nullptr);
-		// TODO: Part 4d
-		// TODO: Part 2i
-		// TODO: Part 3b
-		 GvkHelper::write_to_buffer(device, vectorData[0], &model, sizeof(model));
+		 GvkHelper::write_to_buffer(device, vectorData[currentBuffer], shaderData.data(), sizeof(shaderData[0])*shaderData.size());
 
-	 MaterialData materialData[2] = {};
-	 for (int i = 0; i < 2; i++)
+	 //MaterialData materialData[2] = {};
+	 for (int i = 0; i < newLevel.myModel.size(); i++) //for every model
 	 {
-		 materialData[i].material_index = FSLogo_meshes[i].materialIndex;
-		 vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
-			 0, sizeof(unsigned int), &materialData[i].material_index);
-		 vkCmdDrawIndexed(commandBuffer, FSLogo_meshes[i].indexCount, 1, FSLogo_meshes[i].indexOffset, 0, 0);
+		vkCmdBindVertexBuffers(commandBuffer, 0, 1, &newLevel.myModel[i].vertexBuffer, offsets);
+		vkCmdBindIndexBuffer(commandBuffer, newLevel.myModel[i].indexBuffer, 0, VkIndexType::VK_INDEX_TYPE_UINT32);
+		 for (int j = 0; j < newLevel.myModel[i].parse.meshCount; j++) // for every sub mesh
+		 {
+			 unsigned int id[2] = {i, j};
+			 //materialData[i].material_index = FSLogo_meshes[i].materialIndex;
+			 vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+				 0, sizeof(unsigned int)*2, id);
+			 vkCmdDrawIndexed(commandBuffer, newLevel.myModel[i].parse.meshes[j].drawInfo.indexCount, 1, newLevel.myModel[i].parse.meshes[j].drawInfo.indexOffset, 0, 0);
+		 }
 	 }
 			// TODO: Part 3d
 		//vkCmdDraw(commandBuffer, 3, 1, 0, 0); // TODO: Part 1d, 1h
@@ -580,6 +594,13 @@ private:
 		{
 			vkDestroyBuffer(device, vectorBuffer[i], nullptr);
 			vkFreeMemory(device, vectorData[i], nullptr);
+		}
+		for (int i = 0; i < newLevel.myModel.size(); i++)
+		{
+			vkDestroyBuffer(device, newLevel.myModel[i].vertexBuffer, nullptr);
+			vkFreeMemory(device, newLevel.myModel[i].vertexData, nullptr);
+			vkDestroyBuffer(device, newLevel.myModel[i].indexBuffer, nullptr);
+			vkFreeMemory(device, newLevel.myModel[i].indexData, nullptr);
 		}
 		vkDestroyBuffer(device, vertexHandle, nullptr);
 		vkFreeMemory(device, vertexData, nullptr);
