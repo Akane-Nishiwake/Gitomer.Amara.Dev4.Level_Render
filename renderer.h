@@ -1,6 +1,6 @@
 #include "shaderc/shaderc.h" // needed for compiling shaders at runtime
 #ifdef _WIN32 // must use MT platform DLL libraries on windows
-	#pragma comment(lib, "shaderc_combined.lib") 
+#pragma comment(lib, "shaderc_combined.lib") 
 #endif
 #include "FSLogo.h"
 #include "ModelLoader.h"
@@ -121,12 +121,12 @@ float4 main(OutVertex outVert) : SV_TARGET
 {
 	float4 Am = sceneData[mesh_ID].Ambi;
 	float3 viewDirect = normalize(sceneData[mesh_ID].camWpos.xyz - outVert.posW.xyz);
-	float3 HalfVec = normalize(-normalize(sceneData[mesh_ID].sunDirection.xyz) + viewDirect);
+	float3 HalfVec = normalize(-normalize(sceneData[mesh_ID].sunDirection.xyz)  + viewDirect);
 	float Intense = saturate(pow( dot(normalize(outVert.nrm),HalfVec), sceneData[mesh_ID].materials[material_ID].Ns));
-	  float4 Reflection = float4(sceneData[mesh_ID].materials[material_ID].Ks, 0) * Intense * sceneData[mesh_ID].sunColor;
-    float ratio = saturate(dot(normalize(-sceneData[mesh_ID].sunDirection.xyz), normalize(outVert.nrm)));
+	float4 Reflection = float4(sceneData[mesh_ID].materials[material_ID].Ks, 0) * Intense * sceneData[mesh_ID].sunColor;
+	float ratio = saturate(dot(normalize(-sceneData[mesh_ID].sunDirection.xyz), normalize(outVert.nrm)));
 	float4 Lumi = sceneData[mesh_ID].sunColor * ratio;
-    float4 materialColor = float4(sceneData[mesh_ID].materials[material_ID].Kd, 0);
+	float4 materialColor = float4(sceneData[mesh_ID].materials[material_ID].Kd, 0);
 	return saturate(Lumi + Am) * materialColor + Reflection;
 }
 )";
@@ -143,14 +143,14 @@ class Renderer
 	GW::SYSTEM::GWindow win;
 	GW::GRAPHICS::GVulkanSurface vlk;
 	GW::CORE::GEventReceiver shutdown;
-	
+
 	// what we need at a minimum to draw a triangle
 	VkDevice device = nullptr;
 	VkBuffer vertexHandle = nullptr;
 	VkDeviceMemory vertexData = nullptr;
 	// TODO: Part 1g
-	VkBuffer  indexBuffer= nullptr;
-	VkDeviceMemory  indexData= nullptr;
+	VkBuffer  indexBuffer = nullptr;
+	VkDeviceMemory  indexData = nullptr;
 	// TODO: Part 2c
 	std::vector<VkBuffer> vectorBuffer;
 	std::vector<VkDeviceMemory> vectorData;
@@ -175,7 +175,7 @@ class Renderer
 	GW::MATH::GVECTORF eye = { 0, 15, -15, 0 };
 	GW::MATH::GVECTORF at = { 0.15f, 0.75f, 0 };
 	GW::MATH::GVECTORF up = { 0, 1, 0 };
-	GW::MATH::GVECTORF LightDir = { -1, -1, 2 };
+	GW::MATH::GVECTORF LightDir = { 1.5, -2.5, 2 };
 	GW::MATH::GVECTORF LightCol = { 0.9, 0.9, 1, 1 };
 	GW::MATH::GVECTORF Ambi = { 0.25,0.25,0.35,1 };
 	std::vector<SHADER_MODEL_DATA> shaderData;
@@ -184,7 +184,7 @@ class Renderer
 	GW::MATH::GMATRIXF world;
 	GW::MATH::GMATRIXF camera;
 #pragma endregion
-	void fillShaderData(Level &level, VkPhysicalDevice physicalDevice, VkDevice device)
+	void fillShaderData(Level& level, VkPhysicalDevice physicalDevice, VkDevice device)
 	{
 		shaderData.clear();
 		float aspect = 0.0f;
@@ -226,12 +226,12 @@ class Renderer
 			GvkHelper::write_to_buffer(device, level.myModel[i].indexData, level.myModel[i].parse.indices.data(), sizeof(unsigned int) * level.myModel[i].parse.indices.size());
 		}
 	}
-	
+
 public:
 
 	Level newLevel;
 	Level switchedLevel;
-	
+
 	Renderer(GW::SYSTEM::GWindow _win, GW::GRAPHICS::GVulkanSurface _vlk)
 	{
 		win = _win;
@@ -239,9 +239,7 @@ public:
 		//camera movement
 		input.Create(win);
 		control.Create();
-		
-
-
+		newLevel.LoadLevel("../GameLevel.txt"); //starting level
 		unsigned int image = 0;
 		vlk.GetSwapchainImageCount(image);
 		vectorBuffer.resize(image);
@@ -253,17 +251,12 @@ public:
 		vlk.GetDevice((void**)&device);
 		vlk.GetPhysicalDevice((void**)&physicalDevice);
 		proxy.Create();
-	
-		fillShaderData(newLevel, physicalDevice, device);
-	
-		
 
+		fillShaderData(newLevel, physicalDevice, device);
 
 		/***************** GEOMETRY INTIALIZATION ******************/
 		// Grab the device & physical device so we can allocate some stuff
-		
 
-		// TODO: Part 1c
 		// Create Vertex Buffer
 		float verts[] = {
 			   0,   0.5f,
@@ -281,13 +274,13 @@ public:
 			VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &indexBuffer, &indexData);
 		GvkHelper::write_to_buffer(device, indexData, FSLogo_indices, sizeof(FSLogo_indices));
 		// TODO: Part 2d
-		
+
 		for (int i = 0; i < image; i++)
 		{
-			GvkHelper::create_buffer(physicalDevice, device, sizeof(SHADER_MODEL_DATA)*  shaderData.size(),
+			GvkHelper::create_buffer(physicalDevice, device, sizeof(SHADER_MODEL_DATA) * shaderData.size(),
 				VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
 				VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &vectorBuffer[i], &vectorData[i]);
-			GvkHelper::write_to_buffer(device, vectorData[i], shaderData.data(), sizeof(SHADER_MODEL_DATA)*shaderData.size());
+			GvkHelper::write_to_buffer(device, vectorData[i], shaderData.data(), sizeof(SHADER_MODEL_DATA) * shaderData.size());
 		}
 
 #pragma region Shader Initialization
@@ -323,6 +316,10 @@ public:
 		shaderc_compile_options_release(options);
 		shaderc_compiler_release(compiler);
 #pragma endregion
+
+#pragma region Pipeline Initialization
+
+
 
 		/***************** PIPELINE INTIALIZATION ******************/
 		// Create Pipeline & Layout (Thanks Tiny!)
@@ -363,9 +360,9 @@ public:
 		input_vertex_info.pVertexAttributeDescriptions = vertex_attribute_description;
 		// Viewport State (we still need to set this up even though we will overwrite the values)
 		VkViewport viewport = {
-            0, 0, static_cast<float>(width), static_cast<float>(height), 0, 1
-        };
-        VkRect2D scissor = { {0, 0}, {width, height} };
+			0, 0, static_cast<float>(width), static_cast<float>(height), 0, 1
+		};
+		VkRect2D scissor = { {0, 0}, {width, height} };
 		VkPipelineViewportStateCreateInfo viewport_create_info = {};
 		viewport_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
 		viewport_create_info.viewportCount = 1;
@@ -425,7 +422,7 @@ public:
 		color_blend_create_info.blendConstants[2] = 0.0f;
 		color_blend_create_info.blendConstants[3] = 0.0f;
 		// Dynamic State 
-		VkDynamicState dynamic_state[2] = { 
+		VkDynamicState dynamic_state[2] = {
 			// By setting these we do not need to re-create the pipeline on Resize
 			VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR
 		};
@@ -466,7 +463,7 @@ public:
 		desc_set_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
 
 		vkAllocateDescriptorSets(device, &desc_set_info, &descripDS);
-		
+
 		VkDescriptorBufferInfo desc_buff_info = {};
 		desc_buff_info.buffer = vectorBuffer[0];
 		desc_buff_info.offset = 0;
@@ -482,7 +479,7 @@ public:
 		write_desc_set.pBufferInfo = &desc_buff_info;
 
 		vkUpdateDescriptorSets(device, 1, &write_desc_set, 0, nullptr);
-			// TODO: Part 4f
+		// TODO: Part 4f
 		VkPushConstantRange constant_range_info = {};
 		constant_range_info.offset = 0;
 		constant_range_info.size = sizeof(unsigned int) * 2;
@@ -498,7 +495,7 @@ public:
 		pipeline_layout_create_info.pPushConstantRanges = &constant_range_info;
 		vkCreatePipelineLayout(device, &pipeline_layout_create_info,
 			nullptr, &pipelineLayout);
-	    // Pipeline State... (FINALLY) 
+		// Pipeline State... (FINALLY) 
 		VkGraphicsPipelineCreateInfo pipeline_create_info = {};
 		pipeline_create_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
 		pipeline_create_info.stageCount = 2;
@@ -515,16 +512,16 @@ public:
 		pipeline_create_info.renderPass = renderPass;
 		pipeline_create_info.subpass = 0;
 		pipeline_create_info.basePipelineHandle = VK_NULL_HANDLE;
-		vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, 
+		vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1,
 			&pipeline_create_info, nullptr, &pipeline);
-
+#pragma endregion
 		/***************** CLEANUP / SHUTDOWN ******************/
 		// GVulkanSurface will inform us when to release any allocated resources
 		shutdown.Create(vlk, [&]() {
 			if (+shutdown.Find(GW::GRAPHICS::GVulkanSurface::Events::RELEASE_RESOURCES, true)) {
 				CleanUp(); // unlike D3D we must be careful about destroy timing
 			}
-		});
+			});
 	}
 	void Render()
 	{
@@ -540,20 +537,20 @@ public:
 		win.GetClientHeight(height);
 		// setup the pipeline's dynamic settings
 		VkViewport viewport = {
-            0, 0, static_cast<float>(width), static_cast<float>(height), 0, 1
-        };
-        VkRect2D scissor = { {0, 0}, {width, height} };
+			0, 0, static_cast<float>(width), static_cast<float>(height), 0, 1
+		};
+		VkRect2D scissor = { {0, 0}, {width, height} };
 		vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
 		vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-		
+
 		// now we can draw
 		VkDeviceSize offsets[] = { 0 };
 
-	 vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout,
-		0, 1, &descripDS, 0, nullptr);
-		 GvkHelper::write_to_buffer(device, vectorData[currentBuffer], shaderData.data(), sizeof(shaderData[0])*shaderData.size());
-		 float num1 = 0.0f;
+		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout,
+			0, 1, &descripDS, 0, nullptr);
+		GvkHelper::write_to_buffer(device, vectorData[currentBuffer], shaderData.data(), sizeof(shaderData[0]) * shaderData.size());
+		/* float num1 = 0.0f;
 		 input.GetState(G_KEY_1, num1);
 		 float num2 = 0.0f;
 		 input.GetState(G_KEY_2, num2);
@@ -564,49 +561,38 @@ public:
 		 else if (num2)
 		 {
 			 switchedLevel.LoadLevel("../GameLevel3.txt");
-		 }
-		 Level* tempLevel = nullptr;
-		 if (num1)
-		 {
-			 tempLevel = &newLevel;
-		 }
-		 else if (num2)
-		 {
-			 tempLevel = &switchedLevel;
-		 }
-		 //if key pressed set temp level to & of current level????????????????????????????????????????????????????????????????????????????????????????
-	 //MaterialData materialData[2] = {};
-	 for (int i = 0; i < tempLevel->myModel.size(); i++) //for every model
-	 {
-		vkCmdBindVertexBuffers(commandBuffer, 0, 1, &tempLevel->myModel[i].vertexBuffer, offsets);
-		vkCmdBindIndexBuffer(commandBuffer, tempLevel->myModel[i].indexBuffer, 0, VkIndexType::VK_INDEX_TYPE_UINT32);
-		for (int j = 0; j < tempLevel->myModel[i].parse.meshCount; j++) // for every sub mesh
+		 }*/
+		 // Level* tempLevel = nullptr;
+		 ///* if (num1)
+		 // {*/
+		 //	 tempLevel = &newLevel;
+		 /* }
+		  else if (num2)
+		  {
+			  tempLevel = &switchedLevel;
+		  }*/
+		  //if key pressed set temp level to & of current level????????????????????????????????????????????????????????????????????????????????????????
+	  //MaterialData materialData[2] = {};
+		for (int i = 0; i < newLevel.myModel.size(); i++) //for every model
 		{
-			unsigned int id[2] = { i, j };
-			//materialData[i].material_index = FSLogo_meshes[i].materialIndex;
-			vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
-				0, sizeof(unsigned int) * 2, id);
-			vkCmdDrawIndexed(commandBuffer, tempLevel->myModel[i].parse.meshes[j].drawInfo.indexCount, 1, tempLevel->myModel[i].parse.meshes[j].drawInfo.indexOffset,0, 0);
-			 float debug = 0;
-		 }
-	 }
-		
-		
+			vkCmdBindVertexBuffers(commandBuffer, 0, 1, &newLevel.myModel[i].vertexBuffer, offsets);
+			vkCmdBindIndexBuffer(commandBuffer, newLevel.myModel[i].indexBuffer, 0, VkIndexType::VK_INDEX_TYPE_UINT32);
+			for (int j = 0; j < newLevel.myModel[i].parse.meshCount; j++) // for every sub mesh
+			{
+				unsigned int id[2] = { i, j };
+				//materialData[i].material_index = FSLogo_meshes[i].materialIndex;
+				vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+					0, sizeof(unsigned int) * 2, id);
+				vkCmdDrawIndexed(commandBuffer, newLevel.myModel[i].parse.meshes[j].drawInfo.indexCount, 1, newLevel.myModel[i].parse.meshes[j].drawInfo.indexOffset, 0, 0);
+				float debug = 0;
+			}
+		}
+
+
 	}
 	void CameraUpdate()
 	{
-		float num1 = 0.0f;
-		input.GetState(G_KEY_1, num1);
-		float num2 = 0.0f;
-		input.GetState(G_KEY_2, num2);
-		if (num1)
-		{
-			newLevel.LoadLevel("../GameLevel.txt");
-		}
-		else if (num2)
-		{
-			switchedLevel.LoadLevel("../GameLevel3.txt");
-		}
+
 		auto now = std::chrono::steady_clock::now();
 		deltaTime = std::chrono::duration_cast<std::chrono::microseconds>(now - lastUpdate).count() / 1000000.0f; //seconds
 		lastUpdate = now;
@@ -674,7 +660,7 @@ public:
 			xChange = aState - dState + lax;
 		}
 		translationMatrix.row4 = { xChange * frameSpeed, 0, zChange * frameSpeed, 1.0f };
-	
+
 		if (G_PASS(result) && result != GW::GReturn::REDUNDANT)
 		{
 			// TODO: Part 4f
@@ -695,35 +681,28 @@ public:
 			inverseView.row4 = camPos;
 		}
 		// TODO: Part 4c
-		Level* tempLevel = nullptr;
-		if (num1)
-		{
-			tempLevel = &newLevel;
-		}
-		else if (num2)
-		{
-			tempLevel = &switchedLevel;
-		}
+		//Level* tempLevel = nullptr;
+
 		//add if check for button input
 		proxy.InverseF(inverseView, shaderData[0].view);
 		proxy.MultiplyMatrixF(shaderData[0].view, translationMatrix, shaderData[0].view);
-		for (int i = 0; i < tempLevel->myModel.size(); i++)
+		for (int i = 0; i < newLevel.myModel.size(); i++)
 		{
 			shaderData[i].view = shaderData[0].view;
 			shaderData[i].camWpos = inverseView.row4;
 		}
 
 	}
-	
+
 private:
 	void CleanUp()
 	{
-	
+
 		vkDeviceWaitIdle(device);
-	
+
 		vkDestroyBuffer(device, indexBuffer, nullptr);
 		vkFreeMemory(device, indexData, nullptr);
-		
+
 		for (int i = 0; i < 2; i++)
 		{
 			vkDestroyBuffer(device, vectorBuffer[i], nullptr);
@@ -740,9 +719,9 @@ private:
 		vkFreeMemory(device, vertexData, nullptr);
 		vkDestroyShaderModule(device, vertexShader, nullptr);
 		vkDestroyShaderModule(device, pixelShader, nullptr);
-	
+
 		vkDestroyDescriptorSetLayout(device, descripLayout, nullptr);
-		
+
 		vkDestroyDescriptorPool(device, descripPool, nullptr);
 		vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
 		vkDestroyPipeline(device, pipeline, nullptr);
