@@ -57,13 +57,16 @@ struct OutVertex
 };
 OutVertex main(Vertex inputVertex)
 {
+//changed material_ID to mesh Id and was able to get only one correctly - if any other object are they the other ones do not work
 	OutVertex output = (OutVertex)0;
 	output.pos = float4(inputVertex.pos, 1);
+
 	output.nrm = mul(float4(inputVertex.nrm, 0), sceneData[mesh_ID].matrices[material_ID]);
-    output.posW = mul(float4(inputVertex.pos, 0), sceneData[mesh_ID].matrices[material_ID]);
-output.pos = mul(output.pos, sceneData[mesh_ID].matrices[material_ID]);
+	output.posW = mul(float4(inputVertex.pos, 0), sceneData[mesh_ID].matrices[material_ID]); 
+	output.pos = mul(output.pos, sceneData[mesh_ID].matrices[material_ID]);
 	output.pos = mul(output.pos, sceneData[mesh_ID].view);
-	output.pos = mul(output.pos, sceneData[mesh_ID].projection);
+	output.pos = mul(output.pos, sceneData[mesh_ID].projection); //<-this might be the problem child
+
 	return output;
 }
 )";
@@ -122,11 +125,6 @@ float4 main(OutVertex outVert) : SV_TARGET
 // Creation, Rendering & Cleanup
 class Renderer
 {
-	//for camera movement
-	GW::INPUT::GInput input;
-	GW::INPUT::GController control;
-	float deltaTime;
-	std::chrono::steady_clock::time_point lastUpdate;
 	// proxy handles
 	GW::SYSTEM::GWindow win;
 	GW::GRAPHICS::GVulkanSurface vlk;
@@ -144,6 +142,11 @@ class Renderer
 	std::vector<VkDeviceMemory> vectorData;
 	VkShaderModule vertexShader = nullptr;
 	VkShaderModule pixelShader = nullptr;
+	//for camera movement
+	GW::INPUT::GInput input;
+	GW::INPUT::GController control;
+	float deltaTime;
+	std::chrono::steady_clock::time_point lastUpdate;
 	// pipeline settings for drawing (also required)
 	VkPipeline pipeline = nullptr;
 	VkPipelineLayout pipelineLayout = nullptr;
@@ -178,8 +181,8 @@ public:
 		win = _win;
 		vlk = _vlk;
 
-		newLevel.LoadLevel("../GameLevel.txt");
-
+		newLevel.LoadLevel("../GameLevel2.txt");
+		//camera movement
 		input.Create(win);
 		control.Create();
 
@@ -213,10 +216,10 @@ public:
 		for (int i = 0; i < newLevel.myModel.size(); i++) // checking all models
 		{
 		
-			for (int j= 0; j < newLevel.myModel[i].parse.meshCount; j++)
+			for (int j= 0; j < newLevel.myModel[i].parse.meshCount; j++) //check submeshes
 			{
 				shaderData[i].matricies[j] = newLevel.myModel[i].modelData.matricies[j]; //setting world matrix
-				//float debug = 0;
+				float debug = 0;
 			}
 			//view
 			proxy.IdentityF(shaderData[i].view);
@@ -224,12 +227,12 @@ public:
 			//lighting - set model lighting data to the light color and direction
 			shaderData[i].sunColor = LightCol;
 			shaderData[i].sunDirection = LightDir;
-			//projection
-			proxy.ProjectionVulkanLHF(G_DEGREE_TO_RADIAN(65), aspect, 0.1f, 100.0f,shaderData[i].projection);
-			//materials
+			//projection matrix
+			proxy.ProjectionVulkanLHF(G_DEGREE_TO_RADIAN(65), aspect, 0.1f, 150.0f,shaderData[i].projection);
+			//materials writing to shader
 			for (int k = 0; k < newLevel.myModel[i].parse.materialCount; k++)
 			{
-				shaderData[i].materials[k] = (OBJ_ATTRIBUTES &)newLevel.myModel[i].parse.materials[k].attrib;
+				shaderData[i].materials[k] = (OBJ_ATTRIBUTES &)newLevel.myModel[i].parse.materials[k];
 				float debug = 0;
 			}
 			//buffers
@@ -431,7 +434,6 @@ public:
 		desc_layout_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
 
 		vkCreateDescriptorSetLayout(device, &desc_layout_info, nullptr, &descripLayout);
-		// TODO: Part 2f
 		VkDescriptorPoolSize desc_pool_size = {};
 		desc_pool_size.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 		desc_pool_size.descriptorCount = 1;
@@ -443,8 +445,6 @@ public:
 		desc_pool_info.maxSets = 1;
 
 		vkCreateDescriptorPool(device, &desc_pool_info, nullptr, &descripPool);
-			// TODO: Part 4f
-		// TODO: Part 2g
 		VkDescriptorSetAllocateInfo desc_set_info = {};
 		desc_set_info.descriptorPool = descripPool;
 		desc_set_info.descriptorSetCount = 1;
@@ -453,8 +453,7 @@ public:
 		desc_set_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
 
 		vkAllocateDescriptorSets(device, &desc_set_info, &descripDS);
-			// TODO: Part 4f
-		// TODO: Part 2h
+		
 		VkDescriptorBufferInfo desc_buff_info = {};
 		desc_buff_info.buffer = vectorBuffer[0];
 		desc_buff_info.offset = 0;
@@ -517,9 +516,9 @@ public:
 	void Render()
 	{
 		// TODO: Part 2a
-		auto now = std::chrono::steady_clock::now();
-		deltaTime = std::chrono::duration_cast<std::chrono::microseconds>(now - lastUpdate).count() / 1000000.0f; //seconds
-		lastUpdate = now;
+		//auto now = std::chrono::steady_clock::now();
+		//deltaTime = std::chrono::duration_cast<std::chrono::microseconds>(now - lastUpdate).count() / 1000000.0f; //seconds
+		//lastUpdate = now;
 
 		//proxy.RotateYLocalF(model.matricies[1], deltaTime, model.matricies[1]);
 
@@ -556,17 +555,17 @@ public:
 	 {
 		vkCmdBindVertexBuffers(commandBuffer, 0, 1, &newLevel.myModel[i].vertexBuffer, offsets);
 		vkCmdBindIndexBuffer(commandBuffer, newLevel.myModel[i].indexBuffer, 0, VkIndexType::VK_INDEX_TYPE_UINT32);
-		 for (int j = 0; j < newLevel.myModel[i].parse.meshCount; j++) // for every sub mesh
-		 {
-			 unsigned int id[2] = {i, j};
-			 //materialData[i].material_index = FSLogo_meshes[i].materialIndex;
-			 vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
-				 0, sizeof(unsigned int)*2, id);
-			 vkCmdDrawIndexed(commandBuffer, newLevel.myModel[i].parse.meshes[j].drawInfo.indexCount, 1, newLevel.myModel[i].parse.meshes[j].drawInfo.indexOffset, 0, 0);
+		for (int j = 0; j < newLevel.myModel[i].parse.meshCount; j++) // for every sub mesh
+		{
+			unsigned int id[2] = { i, j };
+			//materialData[i].material_index = FSLogo_meshes[i].materialIndex;
+			vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+				0, sizeof(unsigned int) * 2, id);
+			vkCmdDrawIndexed(commandBuffer, newLevel.myModel[i].parse.meshes[j].drawInfo.indexCount, 1, newLevel.myModel[i].parse.meshes[j].drawInfo.indexOffset,0, 0);
+			 float debug = 0;
 		 }
 	 }
-			// TODO: Part 3d
-		//vkCmdDraw(commandBuffer, 3, 1, 0, 0); // TODO: Part 1d, 1h
+		
 		
 	}
 	void CameraUpdate()
@@ -576,7 +575,7 @@ public:
 		lastUpdate = now;
 		// TODO: Part 4c
 		GW::MATH::GMATRIXF inverseView = GW::MATH::GIdentityMatrixF; //copy of view after inverse
-		proxy.InverseF(newLevel.myModel[0].modelData.view, inverseView);
+		proxy.InverseF(shaderData[0].view, inverseView);
 		GW::MATH::GMATRIXF translationMatrix = GW::MATH::GIdentityMatrixF;
 		GW::MATH::GMATRIXF pitchMatrix = GW::MATH::GIdentityMatrixF;
 		GW::MATH::GMATRIXF yawMatrix = GW::MATH::GIdentityMatrixF;
@@ -638,8 +637,7 @@ public:
 			xChange = aState - dState + lax;
 		}
 		translationMatrix.row4 = { xChange * frameSpeed, 0, zChange * frameSpeed, 1.0f };
-		// TODO: Part 4f
-		// TODO: Part 4g
+	
 		if (G_PASS(result) && result != GW::GReturn::REDUNDANT)
 		{
 			// TODO: Part 4f
@@ -661,10 +659,10 @@ public:
 		}
 		// TODO: Part 4c
 		proxy.InverseF(inverseView, newLevel.myModel[0].modelData.view);
-		proxy.MultiplyMatrixF(newLevel.myModel[0].modelData.view, translationMatrix, newLevel.myModel[0].modelData.view);
+		proxy.MultiplyMatrixF(shaderData[0].view, translationMatrix, shaderData[0].view);
 		for (int i = 0; i < newLevel.myModel.size(); i++)
 		{
-			newLevel.myModel[i].modelData.view = newLevel.myModel[0].modelData.view;
+			shaderData[i].view = newLevel.myModel[0].modelData.view;
 		}
 
 	}
