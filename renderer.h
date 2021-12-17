@@ -122,20 +122,9 @@ float4 main(OutVertex outVert) : SV_TARGET
 // Creation, Rendering & Cleanup
 class Renderer
 {
-//#define MAX_SUBMESH_PER_DRAW 1024
-//	struct SHADER_MODEL_DATA
-//	{
-//		GW::MATH::GVECTORF sunDirection, sunColor;
-//		GW::MATH::GMATRIXF view, projection;
-//
-//		GW::MATH::GMATRIXF matricies[MAX_SUBMESH_PER_DRAW];
-//		OBJ_ATTRIBUTES materials[MAX_SUBMESH_PER_DRAW];
-//	};
-
-	struct MaterialData
-	{
-		unsigned int material_index;
-	};
+	//for camera movement
+	GW::INPUT::GInput input;
+	GW::INPUT::GController control;
 	float deltaTime;
 	std::chrono::steady_clock::time_point lastUpdate;
 	// proxy handles
@@ -176,6 +165,7 @@ class Renderer
 	GW::MATH::GMATRIXF view;
 	GW::MATH::GMATRIXF projection;
 	GW::MATH::GMATRIXF world;
+	GW::MATH::GMATRIXF camera;
 
 	
 public:
@@ -188,11 +178,10 @@ public:
 		win = _win;
 		vlk = _vlk;
 
-		//Model tempModel;
-		//tempModel.LoadFile("../somemodelfile.h2b"); //loading in the appropriate file
 		newLevel.LoadLevel("../GameLevel.txt");
 
-		// we need to load the GameLevel.txt from the level, the level loads each .h2b into a model
+		input.Create(win);
+		control.Create();
 
 		unsigned int image = 0;
 		vlk.GetSwapchainImageCount(image);
@@ -579,6 +568,105 @@ public:
 			// TODO: Part 3d
 		//vkCmdDraw(commandBuffer, 3, 1, 0, 0); // TODO: Part 1d, 1h
 		
+	}
+	void CameraUpdate()
+	{
+		auto now = std::chrono::steady_clock::now();
+		deltaTime = std::chrono::duration_cast<std::chrono::microseconds>(now - lastUpdate).count() / 1000000.0f; //seconds
+		lastUpdate = now;
+		// TODO: Part 4c
+		GW::MATH::GMATRIXF inverseView = GW::MATH::GIdentityMatrixF; //copy of view after inverse
+		proxy.InverseF(newLevel.myModel[0].modelData.view, inverseView);
+		GW::MATH::GMATRIXF translationMatrix = GW::MATH::GIdentityMatrixF;
+		GW::MATH::GMATRIXF pitchMatrix = GW::MATH::GIdentityMatrixF;
+		GW::MATH::GMATRIXF yawMatrix = GW::MATH::GIdentityMatrixF;
+		// TODO: Part 4d
+		const float camSpeed = 0.3f;
+		float frameSpeed = camSpeed * deltaTime;
+		float thumbSpeed = G_PI_F * deltaTime;
+		float FOV = G_DEGREE_TO_RADIAN(65);
+		//initializing movment
+		float yChange = 0.0f;
+		float zChange = 0.0f;
+		float xChange = 0.0f;
+		float totalPitchY = 0.0f;
+		float totalYawX = 0.0f;
+
+		float pitchY = 0.0f;
+		float yawX = 0.0f;
+
+		float space = 0.0f;
+		float shift = 0.0f;
+		float rt = 0.0f;
+		float lt = 0.0f;
+
+		float wState = 0.0f;
+		float sState = 0.0f;
+		float lay = 0.0f;
+		float ray = 0.0f;
+		float dState = 0.0f;
+		float aState = 0.0f;
+		float lax = 0.0f;
+		float rax = 0.0f;
+
+		//Pitch (up/down) Yaw(side)
+		GW::GReturn result = input.GetMouseDelta(yawX, pitchY);
+		control.GetState(0, G_RY_AXIS, ray);
+		control.GetState(0, G_RX_AXIS, rax);
+		//up down
+		input.GetState(G_KEY_SPACE, space);
+		input.GetState(G_KEY_LEFTSHIFT, shift);
+		control.GetState(0, G_RIGHT_TRIGGER_AXIS, rt);
+		control.GetState(0, G_LEFT_TRIGGER_AXIS, lt);
+		//forward and back
+		input.GetState(G_KEY_W, wState);
+		input.GetState(G_KEY_S, sState);
+		control.GetState(0, G_LY_AXIS, lay);
+		//left and right
+		input.GetState(G_KEY_D, dState);
+		input.GetState(G_KEY_A, aState);
+		control.GetState(0, G_LX_AXIS, lax);
+		if (space > 0 || shift > 0 || rt > 0 || lt > 0)
+		{
+			yChange = space - shift + rt - lt;
+		}
+		inverseView.row4.y += yChange * camSpeed * deltaTime;
+		// TODO: Part 4e
+		if (wState > 0 || sState > 0 || dState > 0 || aState > 0)
+		{
+			zChange = sState - wState + lay;
+			xChange = aState - dState + lax;
+		}
+		translationMatrix.row4 = { xChange * frameSpeed, 0, zChange * frameSpeed, 1.0f };
+		// TODO: Part 4f
+		// TODO: Part 4g
+		if (G_PASS(result) && result != GW::GReturn::REDUNDANT)
+		{
+			// TODO: Part 4f
+			if (pitchY != 0)
+			{
+				totalPitchY = FOV * pitchY / 600 + ray * -thumbSpeed;
+			}
+			proxy.RotateXLocalF(inverseView, totalPitchY, inverseView); //doesn't stop rotating
+
+			//// TODO: Part 4g
+			if (yawX != 0)
+			{
+				totalYawX = FOV * yawX / 600 + rax * -thumbSpeed;
+			}
+			GW::MATH::GVECTORF camPos = inverseView.row4;
+			inverseView.row4 = { 0, 0, 0, 1 };
+			proxy.RotateYGlobalF(inverseView, totalYawX, inverseView);
+			inverseView.row4 = camPos;
+		}
+		// TODO: Part 4c
+		proxy.InverseF(inverseView, newLevel.myModel[0].modelData.view);
+		proxy.MultiplyMatrixF(newLevel.myModel[0].modelData.view, translationMatrix, newLevel.myModel[0].modelData.view);
+		for (int i = 0; i < newLevel.myModel.size(); i++)
+		{
+			newLevel.myModel[i].modelData.view = newLevel.myModel[0].modelData.view;
+		}
+
 	}
 	
 private:
