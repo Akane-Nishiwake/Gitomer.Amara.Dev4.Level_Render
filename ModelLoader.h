@@ -68,7 +68,7 @@ public:
 				{
 					Model temp;
 					file.getline(buffer, 128, '\n'); // name
-					std::string name = "../../OBJ/";
+					std::string name = "../OBJ/";
 					temp.modelName = std::string(buffer);
 					name.append(temp.modelName);
 					name.append(".h2b");
